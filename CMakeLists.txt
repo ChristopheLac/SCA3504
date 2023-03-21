@@ -2,7 +2,15 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
+set(DTC_OVERLAY_FILE "usb_2.overlay")
+
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(modbus-rtu-client)
 
 target_sources(app PRIVATE src/main.c)
+
+# Include UART ASYNC API adapter
+target_sources_ifdef(CONFIG_BT_NUS_UART_ASYNC_ADAPTER app PRIVATE
+  src/uart_async_adapter.c
+)
