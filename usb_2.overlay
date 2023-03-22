@@ -161,7 +161,7 @@
 	modbus0 {
 		compatible = "zephyr,modbus-serial";
 		status = "okay";
-		de-gpios = <&arduino_header 5 GPIO_ACTIVE_LOW>;	/* A5 */
+		de-gpios = <&arduino_header 5 GPIO_ACTIVE_HIGH>;	/* A5 */
 	};
 };
 
