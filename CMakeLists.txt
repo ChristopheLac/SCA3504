@@ -8,7 +8,7 @@ set(DTC_OVERLAY_FILE "usb_2.overlay")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(modbus-rtu-client)
 
-target_sources(app PRIVATE src/main.c src/ledPwm.c)
+target_sources(app PRIVATE src/main.c src/ledPwm.c src/modbus.c)
 
 # Include UART ASYNC API adapter
 target_sources_ifdef(CONFIG_BT_NUS_UART_ASYNC_ADAPTER app PRIVATE
