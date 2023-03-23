@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-set(DTC_OVERLAY_FILE "usb_2.overlay")
+set(DTC_OVERLAY_FILE "sca3504.overlay")
 
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
