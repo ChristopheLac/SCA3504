@@ -7,7 +7,13 @@
  / {
 	model = "Nordic nRF52840 DK NRF52840";
 	compatible = "nordic,nrf52840-dk-nrf52840";
-		leds {
+
+	chosen {
+		zephyr,console = &cdc_acm_uart0;
+		nordic,nus-uart = &cdc_acm_uart0;
+	};
+
+	leds {
 		compatible = "gpio-leds";
 	    status = "okay";
 		led0: led_0 {
@@ -19,6 +25,7 @@
 			label = "LED USB";
 		};
 	};
+
 	buttons {
 		compatible = "gpio-keys";
 		button0: button_0 {
@@ -30,12 +37,14 @@
 			label = "Push button FOCUS";
 		};
 	};
-    aliases {
+
+	aliases {
         led0 = &led0;
         led1 = &led1;
 		sw0 = &button0;
 		sw1 = &button1;
     };
+
 };
 
 &arduino_serial {
@@ -83,5 +92,11 @@
 	group2 {
 		psels = <NRF_PSEL(PWM_OUT0, 0, 24)>;
 		nordic,invert;
+	};
+};
+
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
 	};
 };
