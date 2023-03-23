@@ -177,4 +177,6 @@ static int composite_pre_init(const struct device *dev)
 #define STACKSIZE 1024
 /* scheduling priority used by each thread */
 #define PRIORITY 7
-K_THREAD_DEFINE(composite_pre_init_id, STACKSIZE, composite_pre_init, NULL, NULL, NULL, PRIORITY, 0, 0);
+K_THREAD_DEFINE(usb_id, STACKSIZE, usb, NULL, NULL, NULL, PRIORITY, 0, 0);
+
+SYS_INIT(composite_pre_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
