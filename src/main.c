@@ -63,6 +63,10 @@
 #include <zephyr/settings/settings.h>
 
 #include <stdio.h>// BLuetooth
+#include "commandUsb.h"
+
+
+str_exchange_table exchange_table;
 
 //
 
@@ -116,6 +120,7 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 void main(void)
 {
 int ret;
+
 	if (!device_is_ready(led.port)) {
 		return;
 	}
