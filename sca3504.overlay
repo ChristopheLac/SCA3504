@@ -47,6 +47,13 @@
 			label = "Push button switch 3";
 		};
 	};
+	
+	pwmleds {
+		compatible = "pwm-leds";
+		pwm_led0: pwm_led_0 {
+			pwms = <&pwm0 0 PWM_KHZ(50) PWM_POLARITY_INVERTED>;
+		};
+	};
 
 	/* These aliases are provided for compatibility with samples */
 	aliases {
@@ -54,6 +61,7 @@
 		led1 = &led1;
 		led2 = &led2;
 		led3 = &led3;
+		pwm-led0 = &pwm_led0;
 		sw0 = &button0;
 		sw1 = &button1;
 		sw2 = &button2;
@@ -84,12 +92,12 @@
 	};
 };
 
+
 &pwm0 {
 	compatible = "nordic,nrf-pwm";
 	status = "okay";
 	#pwm-cells = < 3 >;
 	pinctrl-0 = <&pwm0_default>;
-
 };
 
 &pwm0_default {
