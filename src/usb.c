@@ -14,28 +14,22 @@
 #include <zephyr/drivers/gpio.h>
 #include <dk_buttons_and_leds.h>
 
-#define LOG_LEVEL LOG_LEVEL_INF
-LOG_MODULE_REGISTER(usb);
+#include "commandUsb.h"
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(usb_client, LOG_LEVEL_DBG);
 
 static bool configured;
 static const struct device *hdev;
 static struct k_work report_send;
 static ATOMIC_DEFINE(hid_ep_in_busy, 1);
 
-#define HID_EP_BUSY_FLAG	0
-#define REPORT_ID_1		0x01
-#define REPORT_PERIOD		K_SECONDS(2)
-
-static struct report {
-	uint8_t id;
-	uint8_t value;
-} __packed report_1 = {
-	.id = REPORT_ID_1,
-	.value = 0,
-};
+#define HID_EP_BUSY_FLAG 0
 
 static void report_event_handler(struct k_timer *dummy);
 static K_TIMER_DEFINE(event_timer, report_event_handler, NULL);
+#define REPORT_ID_1 0x01
+#define REPORT_PERIOD K_SECONDS(2)
 
 /*
  * Simple HID Report Descriptor
@@ -44,6 +38,7 @@ static K_TIMER_DEFINE(event_timer, report_event_handler, NULL);
  *  05 01 09 00 A1 01 15 00    26 FF 00 85 01 75 08 95
  *  01 09 00 81 02 C0
  */
+
 static const uint8_t hid_report_desc[] = {
 	HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
 	HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
@@ -56,25 +51,116 @@ static const uint8_t hid_report_desc[] = {
 	HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
 	HID_INPUT(0x02),
 	HID_END_COLLECTION,
+
+	/*
+		HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+		HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+		HID_COLLECTION(HID_COLLECTION_APPLICATION),
+			HID_LOGICAL_MIN8(0x00),
+			HID_LOGICAL_MAX16(0xFF, 0x00),
+			HID_REPORT_ID(1),
+			HID_REPORT_SIZE(8),
+			HID_REPORT_COUNT(1),
+			HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+			HID_INPUT(0x0F),
+		HID_END_COLLECTION,
+	*/
+
 };
 
+// mouse
+static const uint8_t hid_report_desc_mouse[] = {
+	HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_MOUSE),
+	HID_COLLECTION(HID_COLLECTION_APPLICATION),
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+	HID_COLLECTION(HID_COLLECTION_PHYSICAL),
+	HID_USAGE_PAGE(HID_USAGE_GEN_BUTTON),
+	HID_USAGE_MIN8(HID_USAGE_GEN_BUTTON),
+	HID_USAGE_MAX8(HID_USAGE_GEN_BUTTON),
+	HID_LOGICAL_MIN8(0),
+	HID_LOGICAL_MAX8(1),
+	HID_REPORT_SIZE(1),
+	HID_REPORT_COUNT(1),
+
+	HID_INPUT(0x02),
+	HID_REPORT_SIZE(5),
+	HID_REPORT_COUNT(1),
+
+	HID_INPUT(1),
+	HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_X),
+	HID_LOGICAL_MIN8(-127),
+	HID_LOGICAL_MAX8(127),
+	HID_REPORT_SIZE(8),
+	HID_REPORT_COUNT(2),
+
+	HID_INPUT(0x06),
+	HID_END_COLLECTION,
+	HID_END_COLLECTION,
+};
+
+// ZBIDA
+static const uint8_t hid_report_desc_Zbida[] = {
+	HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_POINTER),
+	HID_COLLECTION(HID_COLLECTION_APPLICATION),
+	HID_USAGE_MIN8(1),
+	HID_USAGE_MAX8(32),
+	HID_LOGICAL_MIN8(0),
+	HID_LOGICAL_MAX8(255),
+	HID_REPORT_SIZE(8),
+	HID_REPORT_COUNT(32),
+
+	HID_OUTPUT(0x02),
+	HID_REPORT_SIZE(5),
+	HID_REPORT_COUNT(1),
+	HID_USAGE_MIN8(1),
+	HID_USAGE_MAX8(32),
+	HID_LOGICAL_MIN8(0),
+	HID_LOGICAL_MAX8(255),
+	HID_REPORT_SIZE(8),
+	HID_REPORT_COUNT(32),
+
+	HID_INPUT(2),
+	HID_END_COLLECTION,
+};
+
+uint8_t bufferIn[100];
+uint8_t bufferOut[100];
 static void send_report(struct k_work *work)
 {
-	int ret, wrote;
-
-	if (!atomic_test_and_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
-		ret = hid_int_ep_write(hdev, (uint8_t *)&report_1,
-				       sizeof(report_1), &wrote);
-		if (ret != 0) {
-			/*
-			 * Do nothing and wait until host has reset the device
-			 * and hid_ep_in_busy is cleared.
-			 */
-			LOG_ERR("Failed to submit report");
-		} else {
-			LOG_DBG("Report submitted");
+	int ret, wrote, read = -1, nbWrite;
+	if (!atomic_test_and_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG))
+	{
+		ret = hid_int_ep_read(hdev, bufferIn, sizeof(bufferIn), &read);
+		if (ret == 0)
+		{
+			if (0 != read)
+			{
+				nbWrite = traiteCommande(bufferIn, read, bufferOut, sizeof(bufferOut));
+				if (0 != nbWrite)
+				{
+					ret = hid_int_ep_write(hdev, bufferOut,
+										   nbWrite, &wrote);
+					if (ret != 0)
+					{
+						/*
+						 * Do nothing and wait until host has reset the device
+						 * and hid_ep_in_busy is cleared.
+						 */
+						LOG_ERR("Failed to submit report");
+					}
+					else
+					{
+						LOG_DBG("Report submitted");
+					}
+				}
+			}
 		}
-	} else {
+	}
+	else
+	{
 		LOG_DBG("HID IN endpoint busy");
 	}
 }
@@ -82,10 +168,22 @@ static void send_report(struct k_work *work)
 static void int_in_ready_cb(const struct device *dev)
 {
 	ARG_UNUSED(dev);
-	if (!atomic_test_and_clear_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
+	if (!atomic_test_and_clear_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG))
+	{
 		LOG_WRN("IN endpoint callback without preceding buffer write");
 	}
 }
+
+/*
+ * On Idle callback is available here as an example even if actual use is
+ * very limited. In contrast to report_event_handler(),
+ * report value is not incremented here.
+ */
+// static void on_idle_cb(const struct device *dev, uint16_t report_id)
+// {
+// 	LOG_DBG("On idle callback");
+// 	k_work_submit(&report_send);
+// }
 
 /*
  * On Idle callback is available here as an example even if actual use is
@@ -101,14 +199,12 @@ static void on_idle_cb(const struct device *dev, uint16_t report_id)
 static void report_event_handler(struct k_timer *dummy)
 {
 	/* Increment reported data */
-	report_1.value++;
 	k_work_submit(&report_send);
 }
 
 static void protocol_cb(const struct device *dev, uint8_t protocol)
 {
-	LOG_INF("New protocol: %s", protocol == HID_PROTOCOL_BOOT ?
-		"boot" : "report");
+	LOG_INF("New protocol: %s", protocol == HID_PROTOCOL_BOOT ? "boot" : "report");
 }
 
 static const struct hid_ops ops = {
@@ -119,12 +215,14 @@ static const struct hid_ops ops = {
 
 static void status_cb(enum usb_dc_status_code status, const uint8_t *param)
 {
-	switch (status) {
+	switch (status)
+	{
 	case USB_DC_RESET:
 		configured = false;
 		break;
 	case USB_DC_CONFIGURED:
-		if (!configured) {
+		if (!configured)
+		{
 			int_in_ready_cb(hdev);
 			configured = true;
 		}
@@ -142,7 +240,8 @@ void usb(void)
 	int ret;
 
 	ret = usb_enable(status_cb);
-	if (ret != 0) {
+	if (ret != 0)
+	{
 		LOG_ERR("Failed to enable USB");
 		return;
 	}
@@ -153,30 +252,103 @@ void usb(void)
 static int composite_pre_init(const struct device *dev)
 {
 	hdev = device_get_binding("HID_0");
-	if (hdev == NULL) {
+	if (hdev == NULL)
+	{
 		LOG_ERR("Cannot get USB HID Device");
 		return -ENODEV;
 	}
 
 	LOG_INF("HID Device: dev %p", hdev);
 
-	usb_hid_register_device(hdev, hid_report_desc, sizeof(hid_report_desc),
-				&ops);
+	usb_hid_register_device(hdev, hid_report_desc_mouse, sizeof(hid_report_desc_mouse),
+							&ops);
+
+	// usb_hid_register_device(hdev, hid_report_desc_Zbida, sizeof(hid_report_desc_Zbida),
+	// 			&ops);
 
 	atomic_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG);
 	k_timer_start(&event_timer, REPORT_PERIOD, REPORT_PERIOD);
 
-	if (usb_hid_set_proto_code(hdev, HID_BOOT_IFACE_CODE_NONE)) {
-		LOG_WRN("Failed to set Protocol Code");
-	}
+	//	if (usb_hid_set_proto_code(hdev, HID_BOOT_IFACE_CODE_NONE)) {
+	//		LOG_WRN("Failed to set Protocol Code NONE");
+	//	}
 
 	return usb_hid_init(hdev);
+}
+
+void usb_main(void)
+{
+	const struct device *hid_dev;
+	int ret, wrote, read = -1, nbWrite;
+
+	hid_dev = device_get_binding("HID_0");
+	if (hid_dev == NULL)
+	{
+		LOG_ERR("Cannot get USB HID Device");
+		while (1)
+		{
+			k_sleep(K_MSEC(1000));
+		};
+	}
+	usb_hid_register_device(hid_dev,
+							hid_report_desc, sizeof(hid_report_desc),
+							NULL);
+
+	usb_hid_init(hid_dev);
+
+	ret = usb_enable(status_cb);
+	if (ret != 0)
+	{
+		LOG_ERR("Failed to enable USB");
+		while (1)
+		{
+			k_sleep(K_MSEC(1000));
+		};
+	}
+
+	while (true)
+	{
+		if (!atomic_test_and_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG))
+		{
+			// ret = hid_int_ep_read(hdev, bufferIn, 5,	&read);
+			//  if (ret == 0) {
+			//  	if (0 != read) {
+			bufferIn[0] = CMD_VERSION;
+			nbWrite = traiteCommande(bufferIn, read, bufferOut, sizeof(bufferOut));
+			if (0 != nbWrite)
+			{
+				ret = hid_int_ep_write(hdev, bufferOut,
+									   nbWrite, &wrote);
+				if (ret != 0)
+				{
+					/*
+					 * Do nothing and wait until host has reset the device
+					 * and hid_ep_in_busy is cleared.
+					 */
+					LOG_ERR("Failed to submit report");
+				}
+				else
+				{
+					LOG_DBG("Report submitted");
+				}
+				// 		}
+				// 	}
+				// }
+			}
+			else
+			{
+				LOG_DBG("HID IN endpoint busy");
+			}
+			k_sleep(K_MSEC(100));
+		}
+	}
 }
 
 /* size of stack area used by each thread */
 #define STACKSIZE 1024
 /* scheduling priority used by each thread */
 #define PRIORITY 7
-K_THREAD_DEFINE(usb_id, STACKSIZE, usb, NULL, NULL, NULL, PRIORITY, 0, 0);
+	
+K_THREAD_DEFINE(usb_main_id, STACKSIZE, usb_main, NULL, NULL, NULL, PRIORITY, 0, 0);
 
-SYS_INIT(composite_pre_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+	// SYS_INIT(composite_pre_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

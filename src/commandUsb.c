@@ -83,6 +83,7 @@ typedef union
     };
 } str32_t;
 
+#pragma pack(1)
 typedef struct
 {
     CMD_STATE cmd;
@@ -113,7 +114,9 @@ typedef struct
         }serial;
     };
 } strCmdUsbIn;
+#pragma pack()
 
+#pragma pack(1)
 typedef struct
 {
     CMD_STATE cmd;
@@ -151,6 +154,7 @@ typedef struct
         uint8_t serial[SERIAL_SIZE];
     };
 } strCmdUsbOut;
+#pragma pack()
 
 int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOut, const uint8_t nbOutMax)
 {

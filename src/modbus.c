@@ -61,7 +61,7 @@
 
 #include <stdio.h>// BLuetooth
 
-LOG_MODULE_REGISTER(mbc_sample, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(modbus_app, LOG_LEVEL_INF);
 
 static int client_iface;
 
@@ -93,11 +93,11 @@ void main_modbus(void)
 	const uint8_t coil_qty = 3;
 	uint8_t coil[1] = {0};
 	const int32_t sleep = 250; //250
-	int16_t start_address = 0x1802; //F10
-	int16_t start_address1 = 0x007D;//{0x0000,0x1388,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000}; commandez le moteur F06
-	int16_t start_address2 = 0x1840;// Lirez les registers, addres du register et # de registers. F03
-	int16_t reg_val = 0x0008;
-	int16_t num_regs = 0x0006;
+//	int16_t start_address = 0x1802; //F10
+//	int16_t start_address1 = 0x007D;//{0x0000,0x1388,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000}; commandez le moteur F06
+//	int16_t start_address2 = 0x1840;// Lirez les registers, addres du register et # de registers. F03
+//	int16_t reg_val = 0x0008;
+//	int16_t num_regs = 0x0006;
 	static uint8_t node = 1;
 	int err;
 	bool comande;
@@ -259,7 +259,7 @@ void main_modbus(void)
 		LOG_HEXDUMP_INF(holding_reg, sizeof(holding_reg),"WR|RD 3holding register:");
 		k_msleep(sleep);
 		}
-#endif (USB_VCP > 0)
+#endif //(USB_VCP > 0)
 
 	}
 }
