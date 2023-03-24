@@ -21,7 +21,7 @@
 #include <zephyr/settings/settings.h>
 
 #include <zephyr/drivers/pwm.h>
-#include <drivers/pwm.h>
+
 
 LOG_MODULE_REGISTER(log_ledPwm, LOG_LEVEL_INF);
 
@@ -39,11 +39,6 @@ const int num_leds = ARRAY_SIZE(led_label);
 #define FADE_DELAY_MS 10
 #define FADE_DELAY K_MSEC(FADE_DELAY_MS)
 
-#define PWM_LED0_NODE	DT_ALIAS(pwm_leds)
-#define PWM_CHANNEL	DT_PWMS_CHANNEL(PWM_LED0_NODE)
-#define PWM_FLAGS	DT_PWMS_FLAGS(PWM_LED0_NODE)
-
-
 #include "commandUsb.h"
 /**
  * @brief Run tests on a single LED using the LED API syscalls.
@@ -57,7 +52,7 @@ static void ledPuissance(void)
 
 	const struct device *led_pwm;
 	uint8_t led = 0;
-	exchange_table.Light = 90;
+	exchange_table.Light = 20;
 
 	led_pwm = DEVICE_DT_GET(LED_PWM_NODE_ID);
 
@@ -72,7 +67,7 @@ static void ledPuissance(void)
 		LOG_ERR("No LEDs found for %s", led_pwm->name);
 		return;
 	}
-	err = pwm_pin_set_usec(led_pwm, led,  period, 1000, PWM_FLAGS);
+
 	while (1)
 	{
 		if ((exchange_table.Light) != levelEnd)
@@ -82,7 +77,7 @@ static void ledPuissance(void)
 			/* Increase LED brightness gradually up to the level. */
 			while (levelEnd != level)
 			{
-				err = led_set_brightness(led_pwm, led, level);
+				err = led_set_brightness(led_pwm, led, 100 - level);
 				if (err < 0)
 				{
 					LOG_ERR("err=%d brightness=%d\n", err, level);
