@@ -37,21 +37,17 @@
 #define Shutter Shutter_BP_Read() // PIN_IN
 
 #define BUFFER_SIZE (32)
-#define SOFT_VERSION_MAJ 1  // MAJEURE
-#define SOFT_VERSION_MIN 32 // MINEURE
+#define SOFT_VERSION_MAJ 2  // MAJEURE
+#define SOFT_VERSION_MIN 01 // MINEURE
 #define HARD_VERSION_MAJ 1
 #define HARD_VERSION_MIN 0
 
-#define ERROR_NO 0x00    //	pas d'erreur
-#define ERROR_CMD 0xFF   // cde non valide
-#define ERROR_MOTOR 0x55 // pas de rotation du moteur
-#define ERROR_I 0xAA     // depassement du courant
 /* Active endpoints of USB device. */
 #define USBFS_DEVICE (0u)
 #define IN_EP_NUM (1u)
 #define OUT_EP_NUM (2u)
 /* Size of SRAM buffer to store endpoint data. */
-//uint8_t length, i;
+// uint8_t length, i;
 /**************************************
  *  GYRO L3GD20H
  ***************************************/
@@ -95,7 +91,7 @@ enum
 #define STATUS_ZYXDA 0x08 // XYZ data available
 
 #define buff_i2c_size 32
-//uint8_t buff_i2c[buff_i2c_size];
+// uint8_t buff_i2c[buff_i2c_size];
 
 #define timeout_i2c 100
 
@@ -106,31 +102,8 @@ typedef enum
     GYRO_STAT_ERROR
 } GYRO_STATE;
 
-void Gyro_Write_Bytes(uint8_t Register, uint8_t Value);
-uint8_t Gyro_Read_Byte(uint8_t Register);
-void Gyro_Read_Buf(uint8_t Register, uint8_t size);
-/*************************************
-   Fonctions
-***************************************/
-void Task_Init(void);
-void Task_USB(void);
-void Task_Scale(void);
-uint32_t Scale_Convert(void);
-void Task_BLE(void);
-void Task_Gyro(void);
-void Task_BP(void);
-void Task_Leds(void);
-void Task_Light(void);
-void Task_Mot(void);
-void SetupRampConstants(void);
-void CalculatemotorSpeed(void);
-void SetDestination(uint16_t value);
-void Read_Flash(void);
-void Write_Flash(void);
-uint8_t BLE_RxFull(void);
-void BLE_Tx(void);
-uint8_t BLE_Rx(void);
-uint8_t *uitoa(uint16_t Value, uint8_t *Buffer);
+int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOut, const uint8_t nbOutMax);
+
 /*****************************************
    EXCHANGE table
 *******************************************/
@@ -171,7 +144,7 @@ typedef enum
 {
     CMD_VERSION = 1,
     CMD_STATUS,                     //(2u)
-    CMD_LIGHGT_ON_OFF,              //(3u)
+    CMD_LIGHT_ON_OFF,               //(3u)
     CMD_SCALE_T,                    //(4u)
     CMD_SCALE_R,                    //(5u)
     CMD_ROTATION_SENS_ANGLE_MULTIP, //    (6u)
@@ -213,6 +186,15 @@ typedef union
     uint8_t w[2];
     uint8_t b[4];
 } DWORD_VAL;
+
+typedef enum
+{
+    ERROR_NO = 0x00,    //	pas d'erreur
+    ERROR_CMD = 0xFF,   // cde non valide
+    ERROR_MOTOR = 0x55, // pas de rotation du moteur
+    ERROR_I = 0xAA,     // depassement du courant
+
+} eError;
 
 typedef struct
 {
