@@ -117,6 +117,7 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 
 }
 
+//void main_usb(void);
 void main(void)
 {
 int ret;
@@ -133,7 +134,7 @@ int ret;
 	if (ret) {
 		LOG_ERR("Cannot init buttons (err: %d)", ret);
 	}
-
+//main_usb();
 
 
 	while(1) {

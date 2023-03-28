@@ -249,7 +249,8 @@ void usb(void)
 	k_work_init(&report_send, send_report);
 }
 
-static int composite_pre_init(const struct device *dev)
+//static int composite_pre_init(const struct device *dev)
+void composite_pre_init(const struct device *dev)
 {
 	hdev = device_get_binding("HID_0");
 	if (hdev == NULL)
@@ -349,6 +350,6 @@ void usb_main(void)
 /* scheduling priority used by each thread */
 #define PRIORITY 7
 	
-K_THREAD_DEFINE(usb_main_id, STACKSIZE, usb_main, NULL, NULL, NULL, PRIORITY, 0, 0);
+//K_THREAD_DEFINE(usb_main_id, STACKSIZE, usb_main, NULL, NULL, NULL, PRIORITY, 0, 0);
 
 	// SYS_INIT(composite_pre_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
