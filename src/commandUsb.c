@@ -1,6 +1,7 @@
 #include "commandUsb.h"
 
 #include <string.h>
+#include "moteur.h"
 
 uint32_t Scale_Convert(void);
 void SetDestination(uint16_t value);
@@ -180,10 +181,8 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
     case CMD_STATUS: //----------------------ok
         var32.dw = Scale_Convert();
         pOut->status.weight.ui16 = var32.dw;
-        var16.w = exchange_table.motor_position * Coef_360;
-        pOut->status.motorPosition.ui16 = var16.w;
-        var16.w = exchange_table.I_Mot;
-        pOut->status.I_Mot.ui16 = var16.w;
+        pOut->status.motorPosition.ui16 = moteur_getPositionDegreCentieme();
+        pOut->status.I_Mot.ui16 = moteur_getCourantMa();
         if (exchange_table.gyro_state == GYRO_STAT_ERROR)
         {
             pOut->status.error = ERROR_CMD;
@@ -209,34 +208,17 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         break;
     case CMD_ROTATION_SENS_ANGLE_MULTIP: //----------------------reste 2fct + a_v
         exchange_table.motor_state = MOTOR_ANGLE_SETUP;
-        // Sens
-        BACKUP.detail.cw = pIn->rotation.sens;
-        // Angle
-        var16.w = pIn->rotation.angle.ui16;
-        BACKUP.detail.dist_shutter = var16.w;
-        SetDestination(var16.w);
-        // Vitesse
-        BACKUP.detail.speed_mul = pIn->rotation.speedMul;
-        // rampWidthRatio
-        if (pIn->rotation.ramp_width_ratio >= 10 && pIn->rotation.ramp_width_ratio <= 50)
-        {
-            BACKUP.detail.ramp_width_ratio = pIn->rotation.ramp_width_ratio;
+        eSensMoteur sens;
+        if (pIn->rotation.sens) {
+            sens = eSensAntiHoraire;
+        } else {
+            sens = eSensHoraire;
         }
-        // rampWidthUpMax
-        var16.w = pIn->rotation.ramp_width_up_max.ui16;
-        if (var16.w >= 100 && var16.w <= 1000)
-        {
-            BACKUP.detail.ramp_width_up_max = var16.w;
-        }
-        // save command
+        moteur_setPositionSens(pIn->rotation.angle.ui16, true, sens, pIn->rotation.speedMul, pIn->rotation.ramp_width_ratio, pIn->rotation.ramp_width_up_max.ui16);
         if (pIn->rotation.save == 1)
         {
-            //            Write_Flash();
+            moteurSave();
         }
-        //
-        exchange_table.order = usb_order;
-        exchange_table._1ms.motor_work = work_delay;
-        exchange_table._1ms.motor_overange = overrun_delay;
         break;
 
     case CMD_VITESS_ROTATION:
@@ -247,9 +229,8 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         break;
 
     case CMD_POSITIONP:
-        var16.w = exchange_table.motor_position * Coef_360;
-        pOut->motor.position.ui16 = var16.w;
-        if (exchange_table.motor_state == MOTOR_ANGLE_FINISH)
+        pOut->motor.position.ui16 = moteur_getPositionDegreCentieme();
+        if (true == moteur_getArrivePositionFin())
         {
             pOut->motor.finish = 0;
         }
@@ -260,12 +241,11 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         break;
 
     case CMD_INITPP:                       // remise a  position plateau
-        exchange_table.motor_position = 0; // INITPP();
-        exchange_table.dist_error = 0;
+        moteur_setPosition(0);
         break;
 
     case CMD_ADC_MOT:
-        pOut->adcMot.ui16 = exchange_table.I_Mot;
+        pOut->adcMot.ui16 = moteur_getCourantMa();
         break;
     case CMD_GYRO:
         var16.w = pIn->gyro.threshold.ui16;
