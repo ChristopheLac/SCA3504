@@ -5,27 +5,8 @@
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/drivers/uart.h>
-
-#include <string.h>
-
-#include <zephyr/sys/util.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/modbus/modbus.h>
-
-#include <zephyr/devicetree.h> // PWM
-#include <errno.h>
-#include <zephyr/drivers/led.h>
-#include <zephyr/sys/util.h>
-
+ #include <zephyr/modbus/modbus.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/types.h>
-#include "uart_async_adapter.h"
-#include <soc.h>
-#include <zephyr/settings/settings.h>
-
-#include <stdio.h> // BLuetooth
 
 #include "moteur.h"
 #include "myDefine.h"
@@ -165,7 +146,7 @@ int32_t sendMoteur_getPosition(void)
 {
     ui32_modbus_t data;
     // add 198
-    if (0 == modbus_read_holding_regs(client_iface, node, 198, &data, 2))
+    if (0 == modbus_read_holding_regs(client_iface, node, 198, (uint16_t*)&data, 2))
     {
         str32_t steps;
         steps.i16H = data.u16H;
