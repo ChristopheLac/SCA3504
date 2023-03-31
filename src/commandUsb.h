@@ -39,7 +39,7 @@
 #define BUFFER_SIZE (32)
 #define SOFT_VERSION_MAJ 2  // MAJEURE
 #define SOFT_VERSION_MIN 1 // MINEURE
-#define HARD_VERSION_MAJ 1
+#define HARD_VERSION_MAJ 2
 #define HARD_VERSION_MIN 0
 
 /* Active endpoints of USB device. */
@@ -142,6 +142,7 @@ typedef enum
 
 typedef enum
 {
+    CMD_NONE = 0,
     CMD_VERSION = 1,
     CMD_STATUS,                     //(2u)
     CMD_LIGHT_ON_OFF,               //(3u)

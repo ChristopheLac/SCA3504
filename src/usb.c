@@ -10,6 +10,7 @@
 
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/class/usb_hid.h>
+#include "commandUsb.h"
 
 #define LOG_LEVEL LOG_LEVEL_DBG
 LOG_MODULE_REGISTER(main);
@@ -101,28 +102,54 @@ static void int_in_ready_cb(const struct device *dev)
 	ARG_UNUSED(dev);
 	if (!atomic_test_and_clear_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
 		LOG_WRN("IN endpoint callback without preceding buffer write");
+	} else {
+		LOG_WRN("IN endpoint callback without preceding buffer write");
 	}
 }
 
-static void int_out_ready_cb(const struct device *dev)
+static void int_out_ready_cb(uint8_t ep, enum usb_dc_ep_cb_status_code cb_status)
 {
 	int ret;
-	ARG_UNUSED(dev);
-		ret = hid_int_ep_read(hdev, (uint8_t *)&bufferIn,
-				       sizeof(bufferIn), &byteRead);
-		if (ret != 0) {
-			/*
-			 * Do nothing and wait until host has reset the device
-			 * and hid_ep_in_busy is cleared.
-			 */
-			LOG_ERR("int_OUT Failed to read report");
-		} else {
-			LOG_DBG("int_OUT Report read:%d [%d %d %d]", byteRead, bufferIn[0], bufferIn[1], bufferIn[2]);
-		}
+	uint8_t bufferIn[32];
+	uint8_t bufferOut[32];
+	uint32_t byteRead, byteToSend;
+	switch (cb_status) {
+	case USB_DC_EP_DATA_OUT:
+		LOG_DBG("int_OUT USB_DC_EP_DATA_OUT");
+		break;
+	case USB_DC_EP_DATA_IN:
+		LOG_DBG("int_OUT USB_DC_EP_DATA_IN");
+							break;
+	case USB_DC_EP_SETUP:
+		LOG_DBG("int_OUT USB_DC_EP_SETUP");
+		break;
 
-//	if (!atomic_test_and_clear_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
-		// LOG_WRN("OUT endpoint callback without preceding buffer write");
-//	}
+	}
+	ret = hid_int_ep_read(hdev, (uint8_t *)&bufferIn,
+					sizeof(bufferIn), &byteRead);
+	if (ret != 0) {
+		/*
+			* Do nothing and wait until host has reset the device
+			* and hid_ep_in_busy is cleared.
+			*/
+		LOG_ERR("int_OUT Failed to read report");
+	} else {
+		LOG_DBG("int_OUT Report read:%d [%d %d %d]", byteRead, bufferIn[0], bufferIn[1], bufferIn[2]);
+		byteToSend = traiteCommande(bufferIn, byteRead, bufferOut, sizeof(bufferOut));
+		if (byteToSend > 0) {
+			byteToSend = 32;
+			ret = hid_int_ep_write(hdev, bufferOut, byteToSend, NULL);
+			if (ret != 0) {
+				/*
+				* Do nothing and wait until host has reset the device
+				* and hid_ep_in_busy is cleared.
+				*/
+				LOG_ERR("int_OUT Failed to submit report %d", ret);
+			} else {
+				LOG_DBG("int_OUT Report submitted");
+			}
+		}
+	}
 }
 
 /*
@@ -150,7 +177,7 @@ static void protocol_cb(const struct device *dev, uint8_t protocol)
 }
 
 static const struct hid_ops ops = {
-	.int_in_ready = int_in_ready_cb,
+//	.int_in_ready = int_in_ready_cb,
 #ifdef CONFIG_ENABLE_HID_INT_OUT_EP
 	.int_out_ready = int_out_ready_cb,
 #endif
@@ -182,6 +209,7 @@ static void status_cb(enum usb_dc_status_code status, const uint8_t *param)
 void usb_main(void)
 {
 	int ret;
+    commandUsb_init();
 
 	LOG_INF("Starting application");
 
@@ -208,7 +236,7 @@ static int composite_pre_init(const struct device *dev)
 				&ops);
 
 	atomic_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG);
-	k_timer_start(&event_timer, REPORT_PERIOD, REPORT_PERIOD);
+//	k_timer_start(&event_timer, REPORT_PERIOD, REPORT_PERIOD);
 
 	if (usb_hid_set_proto_code(hdev, HID_BOOT_IFACE_CODE_NONE)) {
 		LOG_WRN("Failed to set Protocol Code");

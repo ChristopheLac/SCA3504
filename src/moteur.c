@@ -280,7 +280,10 @@ int sendMoteur_startSequence(void)
 
 uint16_t moteur_getPositionDegreCentieme(void) {
     int32_t positionSteps = l_moteur.positionActuelleSteps % nbStep1Tour;
-    uint16_t angle = positionSteps * 360000 / positionSteps;
+    if (positionSteps < 0) {
+        positionSteps += nbStep1Tour;
+    }
+    uint16_t angle = positionSteps * 36000 / nbStep1Tour;
     return angle;
 }
 
@@ -346,16 +349,16 @@ int8_t moteur_setPositionSens(int32_t angleDegreCentieme, bool angleOffset, eSen
 
     if ((coefVitesse >= 1) && (coefVitesse <= 100))
     {
-        l_moteur.vitesse = 5000 * coefVitesse;
-        if (l_moteur.vitesse > 4000000) {
-            l_moteur.vitesse = 4000000;
+        l_moteur.vitesse = 50 * coefVitesse;
+        if (l_moteur.vitesse > 200000) {
+            l_moteur.vitesse = 200000;
         }
     }
     if ((coefRampe >= 10) && (coefRampe <= 50))
     {
-        l_moteur.rampe = 10000 * coefRampe;
-        if (l_moteur.rampe > 1000000000) {
-            l_moteur.rampe = 1000000000;
+        l_moteur.rampe = 100 * coefRampe;
+        if (l_moteur.rampe > 10000) {
+            l_moteur.rampe = 10000;
         }
     }
     if ((rampeMax >= 100) && (rampeMax <= 1000))
@@ -427,4 +430,4 @@ void main_moteur(void)
 /* scheduling priority used by each thread */
 #define PRIORITY 7
 
-//K_THREAD_DEFINE(main_moteur_id, STACKSIZE, main_moteur, NULL, NULL, NULL, PRIORITY, 0, 0);
+K_THREAD_DEFINE(main_moteur_id, STACKSIZE, main_moteur, NULL, NULL, NULL, PRIORITY, 0, 0);

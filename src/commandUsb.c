@@ -14,6 +14,9 @@ myunion1 BACKUP;
 void commandUsb_init(void)
 {
     //
+    memset(&BACKUP, 0, sizeof(BACKUP));
+    memset(&exchange_table, 0, sizeof(exchange_table));
+
     exchange_table.usb_state = USB_STAT_INIT;
     exchange_table.ble_state = BLE_STAT_INIT;
     exchange_table.scale_state = SCALE_STAT_WAIT;
@@ -29,6 +32,8 @@ void commandUsb_init(void)
         BACKUP.detail.speed_mul = 10;
         BACKUP.detail.ramp_width_ratio = RampWidthRatio;
         BACKUP.detail.ramp_width_up_max = RampWidthUpMax;
+        memcpy(BACKUP.detail.Serial_string1, "String1", sizeof("String1"));
+        memcpy(BACKUP.detail.Serial_string2, "String2", sizeof("String2"));
         //        Write_Flash();
     }
 
@@ -139,9 +144,18 @@ typedef struct
             eError error;
         } status;
         struct {
+            uint8_t error;
+        } light;
+        struct {
             str32_t scaleConvert;
             uint8_t coefWeight;
         } weight;
+        struct {
+            uint8_t error;
+        } rotation;
+        struct {
+            uint8_t error;
+        } vitesse;
         str32_t tare;
         struct {
             str16_t position;
@@ -173,12 +187,15 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
     exchange_table.order = usb_order;
     switch (pIn->cmd)
     {
+    case CMD_NONE:
+        pOut->cmd = CMD_20;
+        return sizeof(*pOut);
     case CMD_VERSION: //----------------------ok
         pOut->version.softMajeur = SOFT_VERSION_MAJ;
         pOut->version.softMineur = SOFT_VERSION_MIN;
         pOut->version.hardMajeur = HARD_VERSION_MAJ;
         pOut->version.hardMineur = HARD_VERSION_MIN;
-        return sizeof(*pOut);
+        return sizeof(pOut->version);
     case CMD_STATUS: //----------------------ok
         var32.dw = Scale_Convert();
         pOut->status.weight.ui16 = var32.dw;
@@ -190,14 +207,15 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         } else {
             pOut->status.error = ERROR_NO;
         }
-        return sizeof(*pOut);
+        return sizeof(pOut->status);
     case CMD_LIGHT_ON_OFF: //----------------------a_v
-        exchange_table.Light = pIn->light;
-        return sizeof(*pOut);
+        exchange_table.Light = pIn->light * 100 / 255;
+        pOut->light.error = 0;
+        return sizeof(pOut->light);
     case CMD_SCALE_T: //--------------------------
         exchange_table.WEIGHT_Tare = exchange_table.WEIGHT;
         pOut->tare.ui32 = exchange_table.WEIGHT_Tare;
-        return sizeof(*pOut);
+        return sizeof(pOut->tare);
     case CMD_SCALE_R: //----------------------a_v
         if (pIn->coefWeight > 0 && pIn->coefWeight < 201)
         {
@@ -206,7 +224,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         var32.dw = Scale_Convert();
         pOut->weight.scaleConvert.ui32 = var32.dw;
         pOut->weight.coefWeight = exchange_table.WEIGHT_Coef;
-        return sizeof(*pOut);
+        return sizeof(pOut->weight);
     case CMD_ROTATION_SENS_ANGLE_MULTIP: //----------------------reste 2fct + a_v
         exchange_table.motor_state = MOTOR_ANGLE_SETUP;
         eSensMoteur sens;
@@ -220,13 +238,15 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         {
             moteurSave();
         }
-        return sizeof(*pOut);
+        pOut->rotation.error = 0;
+        return sizeof(pOut->rotation);
     case CMD_VITESS_ROTATION:
         exchange_table._1ms.motor_work = work_delay;
         exchange_table.motor_state = MOTOR_SPEED;
         BACKUP.detail.cw = pIn->rotationVitesse.sens;
         exchange_table.speed = pIn->rotationVitesse.speed;
-        return sizeof(*pOut);
+        pOut->vitesse.error = 0;
+        return sizeof(pOut->vitesse);
     case CMD_POSITIONP:
         pOut->motor.position.ui16 = moteur_getPositionDegreCentieme();
         if (true == moteur_getArrivePositionFin())
@@ -237,7 +257,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         {
             pOut->motor.finish = 1;
         }
-        return sizeof(*pOut);
+        return sizeof(pOut->motor);
     case CMD_INITPP:                       // remise a  position plateau
         moteur_setPosition(0);
         return sizeof(*pOut);
