@@ -270,8 +270,15 @@ int sendMoteur_startSequence(void)
     return 0;
 }
 
-uint16_t moteur_getPositionDegreCentieme(void);
-uint16_t moteur_getCourantMa(void);
+uint16_t moteur_getPositionDegreCentieme(void) {
+    int32_t positionSteps = l_moteur.positionActuelleSteps % nbStep1Tour;
+    uint16_t angle = positionSteps * 360000 / positionSteps;
+    return angle;
+}
+
+uint16_t moteur_getCourantMa(void) {
+    return 0;
+}
 
 bool moteur_getArrivePositionFin(void)
 {
@@ -412,4 +419,4 @@ void main_moteur(void)
 /* scheduling priority used by each thread */
 #define PRIORITY 7
 
-K_THREAD_DEFINE(main_moteur_id, STACKSIZE, main_moteur, NULL, NULL, NULL, PRIORITY, 0, 0);
+//K_THREAD_DEFINE(main_moteur_id, STACKSIZE, main_moteur, NULL, NULL, NULL, PRIORITY, 0, 0);

@@ -6,6 +6,7 @@
 uint32_t Scale_Convert(void);
 void SetDestination(uint16_t value);
 
+str_exchange_table exchange_table;
 
 myunion1 BACKUP;
 
@@ -177,7 +178,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         pOut->version.softMineur = SOFT_VERSION_MIN;
         pOut->version.hardMajeur = HARD_VERSION_MAJ;
         pOut->version.hardMineur = HARD_VERSION_MIN;
-        break;
+        return sizeof(*pOut);
     case CMD_STATUS: //----------------------ok
         var32.dw = Scale_Convert();
         pOut->status.weight.ui16 = var32.dw;
@@ -189,14 +190,14 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         } else {
             pOut->status.error = ERROR_NO;
         }
-        break;
+        return sizeof(*pOut);
     case CMD_LIGHT_ON_OFF: //----------------------a_v
         exchange_table.Light = pIn->light;
-        break;
+        return sizeof(*pOut);
     case CMD_SCALE_T: //--------------------------
         exchange_table.WEIGHT_Tare = exchange_table.WEIGHT;
         pOut->tare.ui32 = exchange_table.WEIGHT_Tare;
-        break;
+        return sizeof(*pOut);
     case CMD_SCALE_R: //----------------------a_v
         if (pIn->coefWeight > 0 && pIn->coefWeight < 201)
         {
@@ -205,7 +206,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         var32.dw = Scale_Convert();
         pOut->weight.scaleConvert.ui32 = var32.dw;
         pOut->weight.coefWeight = exchange_table.WEIGHT_Coef;
-        break;
+        return sizeof(*pOut);
     case CMD_ROTATION_SENS_ANGLE_MULTIP: //----------------------reste 2fct + a_v
         exchange_table.motor_state = MOTOR_ANGLE_SETUP;
         eSensMoteur sens;
@@ -219,15 +220,13 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         {
             moteurSave();
         }
-        break;
-
+        return sizeof(*pOut);
     case CMD_VITESS_ROTATION:
         exchange_table._1ms.motor_work = work_delay;
         exchange_table.motor_state = MOTOR_SPEED;
         BACKUP.detail.cw = pIn->rotationVitesse.sens;
         exchange_table.speed = pIn->rotationVitesse.speed;
-        break;
-
+        return sizeof(*pOut);
     case CMD_POSITIONP:
         pOut->motor.position.ui16 = moteur_getPositionDegreCentieme();
         if (true == moteur_getArrivePositionFin())
@@ -238,15 +237,13 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         {
             pOut->motor.finish = 1;
         }
-        break;
-
+        return sizeof(*pOut);
     case CMD_INITPP:                       // remise a  position plateau
         moteur_setPosition(0);
-        break;
-
+        return sizeof(*pOut);
     case CMD_ADC_MOT:
         pOut->adcMot.ui16 = moteur_getCourantMa();
-        break;
+        return sizeof(*pOut);
     case CMD_GYRO:
         var16.w = pIn->gyro.threshold.ui16;
         memcpy(var16.b, exchange_table.USB_buffin.data, 2);
@@ -257,37 +254,32 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         pOut->gyro.Gyro_x.ui16 = exchange_table.Gyro_x.w;
         pOut->gyro.Gyro_y.ui16 = exchange_table.Gyro_y.w;
         pOut->gyro.Gyro_z.ui16 = exchange_table.Gyro_z.w;
-        break;
+        return sizeof(*pOut);
     case CMD_WRITE_SERIAL1:
         if (pIn->serial.save == 'W')
         {
             memcpy(BACKUP.detail.Serial_string1, pIn->serial.txt, SERIAL_SIZE);
             //            Write_Flash();
+            return sizeof(*pOut);
         }
-        else
-        {
-            exchange_table.USB_buffout.error = ERROR_CMD;
-            break;
-        }
-
+        exchange_table.USB_buffout.error = ERROR_CMD;
+        return 0;
     case CMD_READ_SERIAL1:
         memcpy(pOut->serial, BACKUP.detail.Serial_string1, SERIAL_SIZE);
-        break;
+        return sizeof(*pOut);
     case CMD_WRITE_SERIAL2:
         if (pIn->serial.save == 'W')
         {
             memcpy(BACKUP.detail.Serial_string2, pIn->serial.txt, SERIAL_SIZE);
             //            Write_Flash();
+        return sizeof(*pOut);
         }
-        else
-        {
             exchange_table.USB_buffout.error = ERROR_CMD;
-            break;
-        }
+        return 0;
 
     case CMD_READ_SERIAL2:
         memcpy(pOut->serial, BACKUP.detail.Serial_string2, SERIAL_SIZE);
-        break;
+        return sizeof(*pOut);
     case CMD_RESET:
         while (1)
             ;
@@ -305,7 +297,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         pOut->error = ERROR_CMD;
         return -1;
     }
-    return sizeof(*pOut);
+    return -3;
 }
 
 uint32_t Scale_Convert(void)

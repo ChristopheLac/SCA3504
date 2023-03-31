@@ -9,9 +9,6 @@ set(DTC_OVERLAY_FILE "sca3504.overlay")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(modbus-rtu-client)
 
-target_sources(app PRIVATE src/main.c src/ledPwm.c src/moteur.c src/usb.c src/commandUsb.c)
+FILE(GLOB app_sources src/*.c)
+target_sources(app PRIVATE ${app_sources})
 
-# Include UART ASYNC API adapter
-target_sources_ifdef(CONFIG_BT_NUS_UART_ASYNC_ADAPTER app PRIVATE
-  src/uart_async_adapter.c
-)

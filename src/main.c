@@ -48,7 +48,6 @@
 //#include <zephyr/logging/log.h>*/
 #include <zephyr/types.h>
 #include <zephyr/usb/usb_device.h>
-#include "uart_async_adapter.h"
 #include <soc.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
@@ -62,9 +61,6 @@
 #include <zephyr/settings/settings.h>
 
 #include <stdio.h> // BLuetooth
-#include "commandUsb.h"
-
-str_exchange_table exchange_table;
 
 //
 
@@ -113,8 +109,8 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 		dk_set_led_on(idx);
 	}
 }
+
 #include "moteur.h"
-// void main_usb(void);
 void main(void)
 {
 	int ret;
@@ -142,25 +138,7 @@ void main(void)
 		// ret = gpio_pin_toggle_dt(&led);
 		// k_sleep(K_MSEC(1000));
 		gpio_pin_toggle_dt(&led);
-#if 0
-k_sleep(K_MSEC(2000));
-// 			moteur_setPositionSens(0, false, eSensHoraire, 0, 0, 0);
-// 			gpio_pin_toggle_dt(&led);
-// k_sleep(K_MSEC(10000));
-			moteur_setPositionSens(9000, true, eSensHoraire, 0, 0, 0);
-			gpio_pin_toggle_dt(&led);
- k_sleep(K_MSEC(2000));
-  			moteur_setPositionSens(18000, true, eSensAntiHoraire, 0, 0, 0);
- 			gpio_pin_toggle_dt(&led);
-k_sleep(K_MSEC(2000));
- 			moteur_setPositionSens(9000, true, eSensAntiHoraire, 0, 0, 0);
- 			gpio_pin_toggle_dt(&led);
-k_sleep(K_MSEC(2000));
-//			moteur_setPositionSens(0, false, eSensHoraire, 0, 0, 0);
-// 			gpio_pin_toggle_dt(&led);
-// k_sleep(K_MSEC(10000));
-			// gpio_pin_toggle_dt(&led);
-#endif
+
 		k_sleep(K_MSEC(1000));
 		while (true != moteur_getArrivePositionFin())
 		{
