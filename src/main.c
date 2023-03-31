@@ -1,198 +1,228 @@
 /*
- * Copyright (c) 2022 Libre Solar Technologies GmbH
+ * Copyright (c) 2016-2018 Intel Corporation.
+ * Copyright (c) 2018-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/drivers/uart.h>
+#include <zephyr/init.h>
 
-#include <string.h>
-
-#include <zephyr/sys/util.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/modbus/modbus.h>
-
-#include <zephyr/devicetree.h> // PWM
-#include <errno.h>
-#include <zephyr/drivers/led.h>
-#include <zephyr/sys/util.h>
-
-#include <zephyr/logging/log.h>
-
-/*//#include "uart_async_adapter.h"// bluetooth
-
-#include <zephyr/types.h>
-//#include <zephyr/kernel.h>
-//#include <zephyr/drivers/uart.h>
 #include <zephyr/usb/usb_device.h>
+#include <zephyr/usb/class/usb_hid.h>
 
-//#include <zephyr/device.h>
-//#include <zephyr/devicetree.h>
-#include <soc.h>
+#define LOG_LEVEL LOG_LEVEL_DBG
+LOG_MODULE_REGISTER(main);
 
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/hci.h>
+static bool configured;
+static const struct device *hdev;
+static struct k_work report_send;
+static ATOMIC_DEFINE(hid_ep_in_busy, 1);
 
-#include <bluetooth/services/nus.h>
+#define HID_EP_BUSY_FLAG	0
+#define REPORT_ID_1		0x01
+#define REPORT_PERIOD		K_SECONDS(2)
 
-//#include <dk_buttons_and_leds.h>
+static struct report {
+	uint8_t value[32];
+} __packed report_1;
 
-//#include <zephyr/settings/settings.h>
-
-//#include <stdio.h>
-
-//#include <zephyr/logging/log.h>*/
-#include <zephyr/types.h>
-#include <zephyr/usb/usb_device.h>
-#include <soc.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/hci.h>
-
-#include <bluetooth/services/nus.h>
-
-#include <dk_buttons_and_leds.h>
-
-#include <zephyr/settings/settings.h>
-
-#include <stdio.h> // BLuetooth
-
-//
-
-// debut essais LED DEBUG
-/* The devicetree node identifier for the "led0" alias. */
-#define LED0_NODE DT_ALIAS(led0)
+static void report_event_handler(struct k_timer *dummy);
+static K_TIMER_DEFINE(event_timer, report_event_handler, NULL);
 
 /*
- * A build error on this line means your board is unsupported.
- * See the sample documentation for information on how to fix this.
+ * Simple HID Report Descriptor
+ * Report ID is present for completeness, although it can be omitted.
+ * Output of "usbhid-dump -d 2fe3:0006 -e descriptor":
+ *  05 01 09 00 A1 01 15 00    26 FF 00 85 01 75 08 95
+ *  01 09 00 81 02 C0
  */
-static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+static const uint8_t hid_report_desc[] = {
+//	HID_USAGE_PAGE(0xFF00),
+	0x06, 0x00, 0xFF, // USAGE_PAGE(Vendor-Defined) => 06 00 FF n'existe pas dans ZEPYR
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_POINTER),
+	HID_COLLECTION(HID_COLLECTION_APPLICATION),
+		HID_USAGE_MIN8(1),
+		HID_USAGE_MAX8(32),
+		HID_LOGICAL_MIN8(1),
+		HID_LOGICAL_MAX16(0xFF, 0x00),
+		HID_REPORT_SIZE(8),
+		HID_REPORT_COUNT(32),
+		HID_OUTPUT(0x02),
 
-// fin essais LED DEBUG
+		HID_USAGE_MIN8(1),
+		HID_USAGE_MAX8(32),
+		HID_LOGICAL_MIN8(0),
+		HID_LOGICAL_MAX16(0xFF, 0x00),
+		HID_REPORT_SIZE(8),
+		HID_REPORT_COUNT(32),
+		HID_INPUT(0x02),
 
-LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+	HID_END_COLLECTION,
+};
+volatile uint8_t bufferIn[32];
+volatile uint32_t byteRead;
 
-uint32_t button[4] = {0};
-void button_changed(uint32_t button_state, uint32_t has_changed)
+static void send_report(struct k_work *work)
 {
-	uint8_t idx = 0;
-	switch (has_changed)
-	{
-	case DK_BTN1_MSK:
-		idx = 0;
-		break;
-	case DK_BTN2_MSK:
-		idx = 1;
-		break;
-	case DK_BTN3_MSK:
-		idx = 2;
-		break;
-	case DK_BTN4_MSK:
-		idx = 3;
-		break;
-		break;
-	}
-	if (0 == (button_state & has_changed))
-	{
-		button[idx] = 0;
-		dk_set_led_off(idx);
-	}
-	else
-	{
-		button[idx] = 1;
-		dk_set_led_on(idx);
+	int ret, wrote;
+		// ret = hid_int_ep_read(hdev, (uint8_t *)&bufferIn,
+		// 		       sizeof(bufferIn), &byteRead);
+		// if (ret != 0) {
+		// 	/*
+		// 	 * Do nothing and wait until host has reset the device
+		// 	 * and hid_ep_in_busy is cleared.
+		// 	 */
+		// 	LOG_ERR("OUT Failed to read report");
+		// } else {
+		// 	LOG_DBG("OUT Report read %d %d %d", bufferIn[0], bufferIn[1], bufferIn[2]);
+		// }
+
+
+	if (!atomic_test_and_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
+		ret = hid_int_ep_write(hdev, (uint8_t *)&report_1,
+				       sizeof(report_1), &wrote);
+		if (ret != 0) {
+			/*
+			 * Do nothing and wait until host has reset the device
+			 * and hid_ep_in_busy is cleared.
+			 */
+			LOG_ERR("Failed to submit report");
+		} else {
+			LOG_DBG("Report submitted");
+		}
+	} else {
+		LOG_DBG("HID IN endpoint busy");
 	}
 }
 
-#include "moteur.h"
-void main(void)
+static void int_in_ready_cb(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	if (!atomic_test_and_clear_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
+		LOG_WRN("IN endpoint callback without preceding buffer write");
+	}
+}
+
+static void int_out_ready_cb(const struct device *dev)
+{
+	int ret;
+	ARG_UNUSED(dev);
+		ret = hid_int_ep_read(hdev, (uint8_t *)&bufferIn,
+				       sizeof(bufferIn), &byteRead);
+		if (ret != 0) {
+			/*
+			 * Do nothing and wait until host has reset the device
+			 * and hid_ep_in_busy is cleared.
+			 */
+			LOG_ERR("int_OUT Failed to read report");
+		} else {
+			LOG_DBG("int_OUT Report read:%d [%d %d %d]", byteRead, bufferIn[0], bufferIn[1], bufferIn[2]);
+		}
+
+//	if (!atomic_test_and_clear_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
+		// LOG_WRN("OUT endpoint callback without preceding buffer write");
+//	}
+}
+
+/*
+ * On Idle callback is available here as an example even if actual use is
+ * very limited. In contrast to report_event_handler(),
+ * report value is not incremented here.
+ */
+static void on_idle_cb(const struct device *dev, uint16_t report_id)
+{
+	LOG_DBG("On idle callback");
+	k_work_submit(&report_send);
+}
+
+static void report_event_handler(struct k_timer *dummy)
+{
+	/* Increment reported data */
+	report_1.value[0]++;
+	k_work_submit(&report_send);
+}
+
+static void protocol_cb(const struct device *dev, uint8_t protocol)
+{
+	LOG_INF("New protocol: %s", protocol == HID_PROTOCOL_BOOT ?
+		"boot" : "report");
+}
+
+static const struct hid_ops ops = {
+	.int_in_ready = int_in_ready_cb,
+#ifdef CONFIG_ENABLE_HID_INT_OUT_EP
+	.int_out_ready = int_out_ready_cb,
+#endif
+	.on_idle = on_idle_cb,
+	.protocol_change = protocol_cb,
+};
+
+static void status_cb(enum usb_dc_status_code status, const uint8_t *param)
+{
+	switch (status) {
+	case USB_DC_RESET:
+		configured = false;
+		break;
+	case USB_DC_CONFIGURED:
+		if (!configured) {
+			int_in_ready_cb(hdev);
+			configured = true;
+		}
+		break;
+	case USB_DC_SOF:
+//		LOG_DBG("new trame receive");
+		break;
+	default:
+		LOG_DBG("status %u unhandled", status);
+		break;
+	}
+}
+
+void usb_main(void)
 {
 	int ret;
 
-	if (!device_is_ready(led.port))
-	{
+	LOG_INF("Starting application");
+
+	ret = usb_enable(status_cb);
+	if (ret != 0) {
+		LOG_ERR("Failed to enable USB");
 		return;
 	}
 
-	ret = dk_leds_init(); // Corregir
-	if (ret)
-	{
-		LOG_ERR("Cannot init LEDs (err: %d)", ret);
-	}
-	ret = dk_buttons_init(button_changed);
-	if (ret)
-	{
-		LOG_ERR("Cannot init buttons (err: %d)", ret);
-	}
-	// main_usb();
-
-	uint8_t rampe = 10;
-	while (1)
-	{
-		// ret = gpio_pin_toggle_dt(&led);
-		// k_sleep(K_MSEC(1000));
-		gpio_pin_toggle_dt(&led);
-
-		k_sleep(K_MSEC(1000));
-		while (true != moteur_getArrivePositionFin())
-		{
-			k_sleep(K_MSEC(1000));
-		}
-
-		k_sleep(K_MSEC(2000));
-		moteur_setPositionSens(36000 * 1, true, eSensHoraire, 1, rampe, 0);
-		gpio_pin_toggle_dt(&led);
-
-		k_sleep(K_MSEC(1000));
-		while (true != moteur_getArrivePositionFin())
-		{
-			k_sleep(K_MSEC(1000));
-		}
-
-		k_sleep(K_MSEC(2000));
-		moteur_setPositionSens(36000 * 2, true, eSensHoraire, 5, rampe, 0);
-		gpio_pin_toggle_dt(&led);
-
-		k_sleep(K_MSEC(1000));
-		while (true != moteur_getArrivePositionFin())
-		{
-			k_sleep(K_MSEC(1000));
-		}
-
-		k_sleep(K_MSEC(2000));
-		moteur_setPositionSens(36000 * 3, true, eSensHoraire, 10, rampe, 0);
-		gpio_pin_toggle_dt(&led);
-
-		k_sleep(K_MSEC(1000));
-		while (true != moteur_getArrivePositionFin())
-		{
-			k_sleep(K_MSEC(1000));
-		}
-
-		k_sleep(K_MSEC(2000));
-		moteur_setPositionSens(36000 * 4, true, eSensHoraire, 50, rampe, 0);
-		gpio_pin_toggle_dt(&led);
-
-		k_sleep(K_MSEC(1000));
-		while (true != moteur_getArrivePositionFin())
-		{
-			k_sleep(K_MSEC(1000));
-		}
-
-		k_sleep(K_MSEC(2000));
-		moteur_setPositionSens(36000 * 5, true, eSensHoraire, 100, rampe, 0);
-		gpio_pin_toggle_dt(&led);
-	}
-
-	rampe += 10;
-	if (rampe > 100)
-	{
-		rampe = 10;
-	}
+	k_work_init(&report_send, send_report);
 }
+
+static int composite_pre_init(const struct device *dev)
+{
+	hdev = device_get_binding("HID_0");
+	if (hdev == NULL) {
+		LOG_ERR("Cannot get USB HID Device");
+		return -ENODEV;
+	}
+
+	LOG_INF("HID Device: dev %p", hdev);
+
+	usb_hid_register_device(hdev, hid_report_desc, sizeof(hid_report_desc),
+				&ops);
+
+	atomic_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG);
+	k_timer_start(&event_timer, REPORT_PERIOD, REPORT_PERIOD);
+
+	if (usb_hid_set_proto_code(hdev, HID_BOOT_IFACE_CODE_NONE)) {
+		LOG_WRN("Failed to set Protocol Code");
+	}
+
+	return usb_hid_init(hdev);
+}
+
+SYS_INIT(composite_pre_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+
+
+/* size of stack area used by each thread */
+#define STACKSIZE 1024
+/* scheduling priority used by each thread */
+#define PRIORITY 7
+	
+K_THREAD_DEFINE(usb_main_id, STACKSIZE, usb_main, NULL, NULL, NULL, PRIORITY, 0, 0);

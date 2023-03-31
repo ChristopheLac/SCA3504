@@ -5,7 +5,9 @@
  */
 
 #include <zephyr/kernel.h>
- #include <zephyr/modbus/modbus.h>
+#ifdef CONFIG_MODBUS_SERIAL
+    #include <zephyr/modbus/modbus.h>
+#endif
 #include <zephyr/logging/log.h>
 
 #include "moteur.h"
@@ -18,6 +20,7 @@ LOG_MODULE_REGISTER(moteur, LOG_LEVEL_DBG);
 
 static int client_iface;
 
+#ifdef CONFIG_MODBUS_SERIAL
 const static struct modbus_iface_param client_param = {
     .mode = MODBUS_MODE_RTU,
     .rx_timeout = 50000,
@@ -38,6 +41,11 @@ int init_modbus_client(void)
 
     return modbus_init_client(client_iface, client_param);
 }
+#else
+    #define modbus_write_holding_regs(iface, unit_id, start_addr, reg_buf, num_regs)    0
+    #define modbus_write_holding_reg(iface, unit_id, start_addr, reg_val)               0
+    #define modbus_read_holding_regs(iface, unit_id, start_addr, reg_buf, num_regs)     0
+#endif
 
 typedef enum
 {
