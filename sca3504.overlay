@@ -7,7 +7,11 @@
  / {
 	model = "Nordic nRF52840 DK NRF52840";
 	compatible = "nordic,nrf52840-dk-nrf52840";
-	
+
+	chosen {
+		zephyr,console = &uart0;
+	};
+
 	leds {
 		compatible = "gpio-leds";
 		led0: led_0 {
@@ -109,6 +113,36 @@
 		psels = <NRF_PSEL(PWM_OUT0, 0, 24)>;
 		nordic,invert;
 	};
+};
+
+&uart0 {
+	compatible = "nordic,nrf-uarte";
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-1 = <&uart0_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+&uart0_default {
+	group1 {
+			psels = <NRF_PSEL(UART_TX, 1, 13)>;
+	};
+
+	group2 {
+			psels = <NRF_PSEL(UART_RX, 1, 15)>;
+			bias-pull-up;
+	};
+
+};
+
+&uart0_sleep {
+	group1 {
+			psels = <NRF_PSEL(UART_TX, 1, 13)>,
+					<NRF_PSEL(UART_RX, 1, 15)>;
+			low-power-enable;
+	};
+
 };
 
 &uart1_default {
