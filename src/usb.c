@@ -12,24 +12,15 @@
 #include <zephyr/usb/class/usb_hid.h>
 #include "commandUsb.h"
 
-#define LOG_LEVEL LOG_LEVEL_DBG
-LOG_MODULE_REGISTER(main);
+#define LOG_LEVEL LOG_LEVEL_INF
+LOG_MODULE_REGISTER(usb_main);
 
 static bool configured;
 static const struct device *hdev;
-static struct k_work report_send;
 static ATOMIC_DEFINE(hid_ep_in_busy, 1);
+static struct k_work report_send;
 
 #define HID_EP_BUSY_FLAG	0
-#define REPORT_ID_1		0x01
-#define REPORT_PERIOD		K_SECONDS(2)
-
-static struct report {
-	uint8_t value[32];
-} __packed report_1;
-
-static void report_event_handler(struct k_timer *dummy);
-static K_TIMER_DEFINE(event_timer, report_event_handler, NULL);
 
 /*
  * Simple HID Report Descriptor
@@ -81,8 +72,8 @@ static void send_report(struct k_work *work)
 
 
 	if (!atomic_test_and_set_bit(hid_ep_in_busy, HID_EP_BUSY_FLAG)) {
-		ret = hid_int_ep_write(hdev, (uint8_t *)&report_1,
-				       sizeof(report_1), &wrote);
+//		ret = hid_int_ep_write(hdev, (uint8_t *)&report_1,
+//				       sizeof(report_1), &wrote);
 		if (ret != 0) {
 			/*
 			 * Do nothing and wait until host has reset the device
@@ -107,26 +98,13 @@ static void int_in_ready_cb(const struct device *dev)
 	}
 }
 
-static void int_out_ready_cb(uint8_t ep, enum usb_dc_ep_cb_status_code cb_status)
+static void int_out_ready_cb(const struct device *dev)
 {
 	int ret;
 	uint8_t bufferIn[32];
 	uint8_t bufferOut[32];
 	uint32_t byteRead, byteToSend;
-	switch (cb_status) {
-	case USB_DC_EP_DATA_OUT:
-		LOG_DBG("int_OUT USB_DC_EP_DATA_OUT");
-		break;
-	case USB_DC_EP_DATA_IN:
-		LOG_DBG("int_OUT USB_DC_EP_DATA_IN");
-							break;
-	case USB_DC_EP_SETUP:
-		LOG_DBG("int_OUT USB_DC_EP_SETUP");
-		break;
-
-	}
-	ret = hid_int_ep_read(hdev, (uint8_t *)&bufferIn,
-					sizeof(bufferIn), &byteRead);
+	ret = hid_int_ep_read(hdev, (uint8_t *)&bufferIn, sizeof(bufferIn), &byteRead);
 	if (ret != 0) {
 		/*
 			* Do nothing and wait until host has reset the device
@@ -147,6 +125,7 @@ static void int_out_ready_cb(uint8_t ep, enum usb_dc_ep_cb_status_code cb_status
 				LOG_ERR("int_OUT Failed to submit report %d", ret);
 			} else {
 				LOG_DBG("int_OUT Report submitted");
+				k_sleep(K_MSEC(10));
 			}
 		}
 	}
@@ -160,13 +139,6 @@ static void int_out_ready_cb(uint8_t ep, enum usb_dc_ep_cb_status_code cb_status
 static void on_idle_cb(const struct device *dev, uint16_t report_id)
 {
 	LOG_DBG("On idle callback");
-	k_work_submit(&report_send);
-}
-
-static void report_event_handler(struct k_timer *dummy)
-{
-	/* Increment reported data */
-	report_1.value[0]++;
 	k_work_submit(&report_send);
 }
 
@@ -206,6 +178,7 @@ static void status_cb(enum usb_dc_status_code status, const uint8_t *param)
 	}
 }
 
+void commandUsb_init(void);
 void usb_main(void)
 {
 	int ret;
