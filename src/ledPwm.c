@@ -34,13 +34,21 @@ const char *led_label[] = {
 
 const int num_leds = ARRAY_SIZE(led_label);
 
-#define MAX_BRIGHTNESS 100
+K_SEM_DEFINE(led_sem, 0, 1);
+
 
 #define FADE_DELAY_MS 2
 #define FADE_DELAY K_MSEC(FADE_DELAY_MS)
 
-#include "commandUsb.h"
+struct {
+	uint8_t value;
+} l_led;
 
+int ledSetValue(uint8_t value) {
+	l_led.value = ((uint16_t)value) * 100 / 255;
+	 k_sem_give(&led_sem);
+	return 0;
+}
 
 
 /**
@@ -51,7 +59,7 @@ static void ledPuissance(void)
 {
 	int err;
 	uint16_t level = 0;
-	uint16_t levelEnd = 0;
+	l_led.value = 0;
 
 	const struct device *led_pwm;
 	uint8_t led = 0;
@@ -70,22 +78,23 @@ static void ledPuissance(void)
 		return;
 	}
 
-		err = led_set_brightness(led_pwm, led, level);
-		if (err < 0)
-		{
-			LOG_ERR("err=%d brightness=%d\n", err, level);
-			return;
-		}
+	err = led_set_brightness(led_pwm, led, level);
+	if (err < 0)
+	{
+		LOG_ERR("err=%d brightness=%d\n", err, level);
+		return;
+	}
+	if (l_led.value != level) {
+		k_sem_give(&led_sem);
+	}
+	
 	while (1)
 	{
-		if ((exchange_table.Light) != levelEnd)
-		{
-			//	LOG_INF("change LED %d - %s", led, led_label[led] ? : "no label");
-			levelEnd = exchange_table.Light;
+		if (k_sem_take(&led_sem, K_MSEC(500)) != 0) {
 			/* Increase LED brightness gradually up to the level. */
-			while (levelEnd != level)
+			while (l_led.value != level)
 			{
-				if (levelEnd > level)
+				if (l_led.value > level)
 				{
 					level++;
 				}
@@ -97,13 +106,9 @@ static void ledPuissance(void)
 				if (err < 0)
 				{
 					LOG_ERR("err=%d brightness=%d\n", err, level);
-					return;
 				}
 				k_sleep(FADE_DELAY);
 			}
-			k_sleep(K_MSEC(1000));
-		} else {
-			k_sleep(K_MSEC(1000));
 		}
 	}
 }
@@ -112,4 +117,4 @@ static void ledPuissance(void)
 /* scheduling priority used by each thread */
 #define PRIORITY 5
 
-	K_THREAD_DEFINE(ledPuissance_id, STACKSIZE, ledPuissance, NULL, NULL, NULL, PRIORITY, 0, 0);
+K_THREAD_DEFINE(ledPuissance_id, STACKSIZE, ledPuissance, NULL, NULL, NULL, PRIORITY, 0, 0);

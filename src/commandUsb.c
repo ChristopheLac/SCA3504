@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include "moteur.h"
+#include "ledPwm.h"
 
 uint32_t Scale_Convert(void);
 void SetDestination(uint16_t value);
@@ -209,8 +210,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         }
         return sizeof(pOut->status);
     case CMD_LIGHT_ON_OFF: //----------------------a_v
-        exchange_table.Light = pIn->light * 100 / 255;
-        pOut->light.error = 0;
+        pOut->light.error = ledSetValue(pIn->light);
         return sizeof(pOut->light);
     case CMD_SCALE_T: //--------------------------
         exchange_table.WEIGHT_Tare = exchange_table.WEIGHT;
