@@ -45,8 +45,10 @@ struct {
 } l_led;
 
 int ledSetValue(uint8_t value) {
-	l_led.value = ((uint16_t)value) * 100 / 255;
-	 k_sem_give(&led_sem);
+	// entree de 0 a 255
+	l_led.value = (((uint16_t)value) * 100 + 55)/ 255;
+	LOG_INF("ledSetValue: USB:%d => PWM:%d%%", value, l_led.value);
+	k_sem_give(&led_sem);
 	return 0;
 }
 
