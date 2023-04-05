@@ -35,9 +35,7 @@ static void scan_filter_match(struct bt_scan_device_info *device_info,
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
-
-//	LOG_INF("Filters matched. Address: %s connectable: %d",
-//	log_strdup(addr), connectable);
+	LOG_INF("Filters matched. Connected %s", addr);
 }
 
 static void scan_connecting_error(struct bt_scan_device_info *device_info)
