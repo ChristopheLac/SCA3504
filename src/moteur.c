@@ -6,7 +6,7 @@
 
 #include <zephyr/kernel.h>
 #ifdef CONFIG_MODBUS_SERIAL
-    #include <zephyr/modbus/modbus.h>
+#include <zephyr/modbus/modbus.h>
 #endif
 #include <zephyr/logging/log.h>
 
@@ -42,9 +42,9 @@ int init_modbus_client(void)
     return modbus_init_client(client_iface, client_param);
 }
 #else
-    #define modbus_write_holding_regs(iface, unit_id, start_addr, reg_buf, num_regs)    0
-    #define modbus_write_holding_reg(iface, unit_id, start_addr, reg_val)               0
-    #define modbus_read_holding_regs(iface, unit_id, start_addr, reg_buf, num_regs)     0
+#define modbus_write_holding_regs(iface, unit_id, start_addr, reg_buf, num_regs) 0
+#define modbus_write_holding_reg(iface, unit_id, start_addr, reg_val) 0
+#define modbus_read_holding_regs(iface, unit_id, start_addr, reg_buf, num_regs) 0
 #endif
 
 typedef enum
@@ -60,8 +60,10 @@ typedef enum
 
 typedef enum
 {
+    MOT_SEND_STOP,
     MOT_STOP,
     MOT_ROTATE_TO_TARGET,
+    MOT_ROTATE_TO_INFINI,
 
 } stateMoteur_t;
 
@@ -100,6 +102,7 @@ typedef union
 
 int sendMoteur_avance(int32_t steps, uint32_t speed_mhz)
 {
+    LOG_DBG("sendMoteur_avance");
     ui32_t temp;
     union
     {
@@ -125,25 +128,43 @@ int sendMoteur_avance(int32_t steps, uint32_t speed_mhz)
 
 int sendMoteur_start(void)
 {
+    LOG_DBG("sendMoteur_start");
     return modbus_write_holding_reg(client_iface, node, 0x007D, 0x0008);
 }
 
 int sendMoteur_stop(void)
 {
+    LOG_DBG("sendMoteur_stop");
     return modbus_write_holding_reg(client_iface, node, 0x007D, eStop);
 }
 
 int sendMoteur_position0(void)
 {
-    return modbus_write_holding_reg(client_iface, node, 0x007D, ePosition0);
+     LOG_DBG("sendMoteur_position0");
+   return modbus_write_holding_reg(client_iface, node, 0x007D, ePosition0);
 }
 
 int sendMoteur_arret(void)
 {
+    LOG_DBG("sendMoteur_arret");
     return modbus_write_holding_reg(client_iface, node, 0x007D, eArret);
 }
 
-int sendMoteur_clearErrors(void){
+int sendMoteur_startHoraire(void)
+{
+    LOG_DBG("sendMoteur_startHoraire");
+    return modbus_write_holding_reg(client_iface, node, 0x007D, eAvance);
+}
+
+int sendMoteur_startAntiHoraire(void)
+{
+    LOG_DBG("sendMoteur_startAntiHoraire");
+    return modbus_write_holding_reg(client_iface, node, 0x007D, eArriere);
+}
+
+int sendMoteur_clearErrors(void)
+{
+    LOG_DBG("sendMoteur_clearErrors");
     ui32_modbus_t data;
     data.u16H = 0;
     data.u16L = 1;
@@ -154,7 +175,7 @@ int32_t sendMoteur_getPosition(void)
 {
     ui32_modbus_t data;
     // add 198
-    if (0 == modbus_read_holding_regs(client_iface, node, 198, (uint16_t*)&data, 2))
+    if (0 == modbus_read_holding_regs(client_iface, node, 198, (uint16_t *)&data, 2))
     {
         str32_t steps;
         steps.i16H = data.u16H;
@@ -222,6 +243,7 @@ int sendMoteur_startSequence(void)
 {
     ui32_t temp;
     ui32_modbus_t reg;
+    LOG_DBG("sendMoteur_startSequence");
 
     reg.u16H = 0;
     reg.u16L = eMoteur_Absolut;
@@ -277,17 +299,56 @@ int sendMoteur_startSequence(void)
 
     return 0;
 }
+int sendMoteur_startRotationInfinie(void)
+{
+    ui32_t temp;
+    ui32_modbus_t reg;
+    LOG_DBG("sendMoteur_startRotationInfinie");
 
-uint16_t moteur_getPositionDegreCentieme(void) {
+    temp.u32 = l_moteur.vitesse;
+    reg.u16H = temp.u16H;
+    reg.u16L = temp.u16L;
+    if (0 != modbus_write_holding_regs(client_iface, node, 0x1804, (uint16_t *)&reg, 2))
+    {
+        LOG_ERR("FC06 failed");
+    }
+    k_sleep(K_MSEC(10));
+
+    if (LONG_MAX == l_moteur.positionCibleSteps)
+    {
+        sendMoteur_startHoraire();
+    }
+    else
+    {
+        // (LONG_MIN == l_moteur.positionCibleSteps)
+        sendMoteur_startAntiHoraire();
+    }
+}
+
+void convertCoefVitesse(uint8_t coefVitesse) {
+    if ((coefVitesse >= 1) && (coefVitesse <= 100))
+    {
+        l_moteur.vitesse = 50 * coefVitesse;
+        if (l_moteur.vitesse > 200000)
+        {
+            l_moteur.vitesse = 200000;
+        }
+    }
+}
+
+uint16_t moteur_getPositionDegreCentieme(void)
+{
     int32_t positionSteps = l_moteur.positionActuelleSteps % nbStep1Tour;
-    if (positionSteps < 0) {
+    if (positionSteps < 0)
+    {
         positionSteps += nbStep1Tour;
     }
     uint16_t angle = positionSteps * 36000 / nbStep1Tour;
     return angle;
 }
 
-uint16_t moteur_getCourantMa(void) {
+uint16_t moteur_getCourantMa(void)
+{
     return 0;
 }
 
@@ -300,11 +361,16 @@ bool moteur_getArrivePositionFin(void)
     return false;
 }
 
+void moteur_stop(void) {
+    l_moteur.state = MOT_SEND_STOP;
+}
+
 int8_t moteur_setPosition(int32_t angleDegreCentieme)
 {
     int32_t positionSteps = l_moteur.positionActuelleSteps % nbStep1Tour;
     int32_t angleSteps = angleDegreCentieme * nbStep1Tour / 36000; // 360° * 100(en centieme)
     int32_t addSteps;
+
     if (eSensHoraire == l_moteur.sensRotation)
     {
         addSteps = angleSteps - positionSteps;
@@ -321,7 +387,12 @@ int8_t moteur_setPosition(int32_t angleDegreCentieme)
             addSteps = addSteps - nbStep1Tour;
         }
     }
-    l_moteur.positionCibleSteps = l_moteur.positionActuelleSteps + addSteps;
+    int32_t positionNewStep = l_moteur.positionActuelleSteps + addSteps;
+    if (positionNewStep != l_moteur.positionCibleSteps)
+    {
+        l_moteur.positionCibleSteps = positionNewStep;
+    }
+
     return 0;
 }
 
@@ -339,25 +410,22 @@ int8_t moteur_setPositionOffset(int32_t angleDegreCentieme)
     return 0;
 }
 
+
 int8_t moteur_setPositionSens(int32_t angleDegreCentieme, bool angleOffset, eSensMoteur sens, uint8_t coefVitesse, uint16_t coefRampe, uint16_t rampeMax)
 {
-    if (MOT_STOP != l_moteur.state) {
+    if (MOT_STOP != l_moteur.state)
+    {
         return -1;
     }
-    
+
     l_moteur.sensRotation = sens;
 
-    if ((coefVitesse >= 1) && (coefVitesse <= 100))
-    {
-        l_moteur.vitesse = 50 * coefVitesse;
-        if (l_moteur.vitesse > 200000) {
-            l_moteur.vitesse = 200000;
-        }
-    }
+    convertCoefVitesse(coefVitesse);
     if ((coefRampe >= 10) && (coefRampe <= 50))
     {
         l_moteur.rampe = 100 * coefRampe;
-        if (l_moteur.rampe > 10000) {
+        if (l_moteur.rampe > 10000)
+        {
             l_moteur.rampe = 10000;
         }
     }
@@ -372,6 +440,20 @@ int8_t moteur_setPositionSens(int32_t angleDegreCentieme, bool angleOffset, eSen
     {
         moteur_setPositionOffset(angleDegreCentieme);
     }
+    return 0;
+}
+
+int8_t moteur_setRotationSens(eSensMoteur sens, uint8_t coefVitesse)
+{
+    if (eSensHoraire == sens)
+    {
+        l_moteur.positionCibleSteps = LONG_MAX;
+    }
+    else
+    {
+        l_moteur.positionCibleSteps = LONG_MIN;
+    }
+    convertCoefVitesse(coefVitesse);
     return 0;
 }
 
@@ -407,8 +489,16 @@ void main_moteur(void)
         case MOT_STOP:
             if (l_moteur.positionCibleSteps != l_moteur.positionActuelleSteps)
             {
-                sendMoteur_startSequence();
-                l_moteur.state = MOT_ROTATE_TO_TARGET;
+                if ((LONG_MAX == l_moteur.positionCibleSteps) || (LONG_MIN == l_moteur.positionCibleSteps))
+                {
+                    sendMoteur_startRotationInfinie();
+                    l_moteur.state = MOT_ROTATE_TO_INFINI;
+                }
+                else
+                {
+                    sendMoteur_startSequence();
+                    l_moteur.state = MOT_ROTATE_TO_TARGET;
+                }
             }
             break;
         case MOT_ROTATE_TO_TARGET:
@@ -419,15 +509,24 @@ void main_moteur(void)
                 l_moteur.state = MOT_STOP;
             }
             break;
+        case MOT_ROTATE_TO_INFINI:
+            l_moteur.positionActuelleSteps = sendMoteur_getPosition();
+            break;
+        case MOT_SEND_STOP:
+            sendMoteur_stop();
+            k_sleep(K_MSEC(1000));
+            l_moteur.positionActuelleSteps = sendMoteur_getPosition();
+            l_moteur.positionCibleSteps = l_moteur.positionActuelleSteps;
+            l_moteur.state = MOT_STOP;
         }
 
-        k_sleep(K_MSEC(10));
+        k_sleep(K_MSEC(100));
     }
 }
 
 /* size of stack area used by each thread */
 #define STACKSIZE 1024
 /* scheduling priority used by each thread */
-#define PRIORITY 7
+#define PRIORITY 5
 
 K_THREAD_DEFINE(main_moteur_id, STACKSIZE, main_moteur, NULL, NULL, NULL, PRIORITY, 0, 0);

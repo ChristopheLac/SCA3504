@@ -4,6 +4,11 @@
 #include "moteur.h"
 #include "ledPwm.h"
 
+
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(commandUsb, LOG_LEVEL_INF);
+
 uint32_t Scale_Convert(void);
 void SetDestination(uint16_t value);
 
@@ -181,6 +186,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
     WORD_VAL var16;
     DWORD_VAL var32;
     static uint8_t cmd20 = 0;
+    eSensMoteur sens;
 
     strCmdUsbIn *pIn = (strCmdUsbIn *)pBufferIn;
     strCmdUsbOut *pOut = (strCmdUsbOut *)pBufferOut;
@@ -189,18 +195,21 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
     pOut->error = ERROR_NO;
     exchange_table.usb_state = USB_STAT_WRITE;
     exchange_table.order = usb_order;
+
     switch (pIn->cmd)
     {
     case CMD_NONE:
-        pOut->cmd = CMD_20;
+//       	LOG_INF("cmd: CMD_NONE");
         return 0;
     case CMD_VERSION: //----------------------ok
+       	LOG_INF("cmd: CMD_VERSION");
         pOut->version.softMajeur = SOFT_VERSION_MAJ;
         pOut->version.softMineur = SOFT_VERSION_MIN;
         pOut->version.hardMajeur = HARD_VERSION_MAJ;
         pOut->version.hardMineur = HARD_VERSION_MIN;
         return sizeof(*pOut);
     case CMD_STATUS: //----------------------ok
+       	LOG_INF("cmd: CMD_STATUS");
         var32.dw = Scale_Convert();
         pOut->status.weight.ui16 = var32.dw;
         pOut->status.motorPosition.ui16 = moteur_getPositionDegreCentieme();
@@ -213,13 +222,16 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         }
         return sizeof(*pOut);
     case CMD_LIGHT_ON_OFF: //----------------------a_v
+       	LOG_INF("cmd: CMD_LIGHT_ON_OFF=%d", pIn->light);
         pOut->light.error = ledSetValue(pIn->light);
         return sizeof(*pOut);
     case CMD_SCALE_T: //--------------------------
+       	LOG_INF("cmd: CMD_SCALE_T");
         exchange_table.WEIGHT_Tare = exchange_table.WEIGHT;
         pOut->tare.ui32 = exchange_table.WEIGHT_Tare;
         return sizeof(*pOut);
     case CMD_SCALE_R: //----------------------a_v
+       	LOG_INF("cmd: CMD_SCALE_R coefWeight=%d", pIn->coefWeight);
         if (pIn->coefWeight > 0 && pIn->coefWeight < 201)
         {
             exchange_table.WEIGHT_Coef = pIn->coefWeight;
@@ -229,8 +241,8 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         pOut->weight.coefWeight = exchange_table.WEIGHT_Coef;
         return sizeof(*pOut);
     case CMD_ROTATION_SENS_ANGLE_MULTIP: //----------------------reste 2fct + a_v
-        exchange_table.motor_state = MOTOR_ANGLE_SETUP;
-        eSensMoteur sens;
+       	LOG_INF("cmd: CMD_ROTATION_SENS_ANGLE_MULTIP sens=%d, angle=%d, speedMul=%d, ramp_width_ratio=%d, ramp_width_up_max=%d", 
+        pIn->rotation.sens, pIn->rotation.angle.ui16, pIn->rotation.speedMul, pIn->rotation.ramp_width_ratio, pIn->rotation.ramp_width_up_max.ui16);
         if (pIn->rotation.sens) {
             sens = eSensAntiHoraire;
         } else {
@@ -244,13 +256,22 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         pOut->rotation.error = 0;
         return sizeof(*pOut);
     case CMD_VITESS_ROTATION:
-        exchange_table._1ms.motor_work = work_delay;
-        exchange_table.motor_state = MOTOR_SPEED;
-        BACKUP.detail.cw = pIn->rotationVitesse.sens;
-        exchange_table.speed = pIn->rotationVitesse.speed;
+       	LOG_INF("cmd: CMD_VITESS_ROTATION, sens=%d, speed=%d", pIn->rotationVitesse.sens, pIn->rotationVitesse.speed);
+        if (0 == pIn->rotationVitesse.speed) {
+            if (true != moteur_getArrivePositionFin())
+            moteur_stop();
+        } else {
+            if (pIn->rotationVitesse.sens) {
+                sens = eSensAntiHoraire;
+            } else {
+                sens = eSensHoraire;
+            }
+            moteur_setRotationSens(pIn->rotationVitesse.speed, sens);
+        }
         pOut->vitesse.error = 0;
         return sizeof(*pOut);
     case CMD_POSITIONP:
+//       	LOG_INF("cmd: CMD_POSITIONP");
         pOut->motor.position.ui16 = moteur_getPositionDegreCentieme();
         if (true == moteur_getArrivePositionFin())
         {
@@ -262,12 +283,15 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         }
         return sizeof(*pOut);
     case CMD_INITPP:                       // remise a  position plateau
+       	LOG_INF("cmd: CMD_INITPP");
         moteur_setPosition(0);
         return sizeof(*pOut);
     case CMD_ADC_MOT:
+       	LOG_INF("cmd: CMD_ADC_MOT");
         pOut->adcMot.ui16 = moteur_getCourantMa();
         return sizeof(*pOut);
     case CMD_GYRO:
+       	LOG_INF("cmd: CMD_GYRO");
         var16.w = pIn->gyro.threshold.ui16;
         memcpy(var16.b, exchange_table.USB_buffin.data, 2);
         if (var16.w == !0)
@@ -279,6 +303,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         pOut->gyro.Gyro_z.ui16 = exchange_table.Gyro_z.w;
         return sizeof(*pOut);
     case CMD_WRITE_SERIAL1:
+       	LOG_INF("cmd: CMD_WRITE_SERIAL1=%s", pIn->serial.txt);
         if (pIn->serial.save == 'W')
         {
             memcpy(BACKUP.detail.Serial_string1, pIn->serial.txt, SERIAL_SIZE);
@@ -288,9 +313,11 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         exchange_table.USB_buffout.error = ERROR_CMD;
         return sizeof(*pOut);
     case CMD_READ_SERIAL1:
+       	LOG_INF("cmd: CMD_READ_SERIAL1");
         memcpy(pOut->serial, BACKUP.detail.Serial_string1, SERIAL_SIZE);
         return sizeof(*pOut);
     case CMD_WRITE_SERIAL2:
+       	LOG_INF("cmd: CMD_WRITE_SERIAL2=%s", pIn->serial.txt);
         if (pIn->serial.save == 'W')
         {
             memcpy(BACKUP.detail.Serial_string2, pIn->serial.txt, SERIAL_SIZE);
@@ -301,14 +328,17 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         return sizeof(*pOut);
 
     case CMD_READ_SERIAL2:
+       	LOG_INF("cmd: CMD_READ_SERIAL2");
         memcpy(pOut->serial, BACKUP.detail.Serial_string2, SERIAL_SIZE);
         return sizeof(*pOut);
     case CMD_RESET:
+       	LOG_INF("cmd: CMD_RESET");
         while (1)
             ;
         break;
 
     case CMD_20: // quand reponse longue un code 0x20 est recu !!!
+       	LOG_INF("cmd: CMD_20");
         if (cmd20)
         {
             cmd20 = 0;
@@ -317,6 +347,7 @@ int8_t traiteCommande(uint8_t *pBufferIn, const uint8_t nbIn, uint8_t *pBufferOu
         return -2;
 
     default:
+       	LOG_INF("cmd: default:%d", pIn->cmd);
         pOut->error = ERROR_CMD;
         return -1;
     }
